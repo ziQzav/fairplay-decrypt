@@ -37,3 +37,21 @@ path must not exist.
 
 The decryptor uses each IPA's SINF and SUPF records to derive page keys,
 decrypt its encrypted arm64 pages, and clear `cryptid`.
+
+## macOS GUI
+
+A simple windowed interface ships in this repository (`mac_gui.py`). It wraps
+the command-line decryptor: pick the encrypted IPA, the `credential.bin` file
+and the output path, then decrypt while progress lines stream into a log. It
+uses tkinter, which is included in the [python.org](https://www.python.org/downloads/)
+macOS build, and adds no third-party dependencies.
+
+After `make` has produced the `transform` binary:
+
+```sh
+python3 mac_gui.py
+```
+
+The GUI refuses to overwrite an existing output, checks that input and output
+differ, reports the decryptor's progress per binary, and on success reveals
+the decrypted IPA in Finder.
