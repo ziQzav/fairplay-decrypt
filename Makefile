@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all credential-bundle
+.PHONY: all credential-bundle app
 
 all: transform
 ifeq ($(shell uname -s),Darwin)
@@ -12,3 +12,6 @@ transform: transform.c
 
 credential-bundle:
 	@$(MAKE) --no-print-directory -C credential-retrieval
+
+app: transform
+	@./make_app.sh

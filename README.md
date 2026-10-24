@@ -55,3 +55,16 @@ python3 mac_gui.py
 The GUI refuses to overwrite an existing output, checks that input and output
 differ, reports the decryptor's progress per binary, and on success reveals
 the decrypted IPA in Finder.
+
+### App bundle
+
+To get a double-clickable macOS app instead of a terminal command:
+
+```sh
+make app
+open "build/FairPlay Decrypt.app"
+```
+
+The bundle is a thin wrapper: it launches `mac_gui.py` with the first Python
+it finds that has tkinter (the python.org build includes it) and shows a
+dialog pointing at python.org if none is found.
