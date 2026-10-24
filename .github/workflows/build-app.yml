@@ -1,0 +1,48 @@
+name: Build macOS app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install cryptography py2app
+      - name: Build universal transform binary
+        run: make transform CC="cc -arch arm64 -arch x86_64"
+      - name: Build app bundle
+        run: python setup.py py2app
+      - name: Zip app bundle
+        run: |
+          cd dist
+          zip -qry "FairPlayDecrypt-macos.zip" "FairPlayDecrypt.app"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FairPlayDecrypt-macos
+          path: dist/FairPlayDecrypt-macos.zip
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Attach zip to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FairPlayDecrypt-macos.zip
+          generate_release_notes: true

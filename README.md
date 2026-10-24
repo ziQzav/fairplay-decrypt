@@ -38,6 +38,20 @@ path must not exist.
 The decryptor uses each IPA's SINF and SUPF records to derive page keys,
 decrypt its encrypted arm64 pages, and clear `cryptid`.
 
+## Download the ready-made app
+
+GitHub Actions builds a standalone macOS app on every release tag and
+attaches the zip to the release: open the repo's
+[Releases](https://github.com/ziQzav/fairplay-decrypt/releases) page,
+download `FairPlayDecrypt-macos.zip`, unzip it and double-click
+`FairPlayDecrypt.app`. The bundle carries its own Python interpreter and
+the universal `transform` binary, so nothing needs to be compiled or
+installed.
+
+The app is unsigned (no paid Apple Developer certificate), so Gatekeeper
+warns on first launch: right-click `FairPlayDecrypt.app` and choose
+**Open**, or run `xattr -cr` on it once.
+
 ## macOS GUI
 
 A simple windowed interface ships in this repository (`mac_gui.py`). It wraps

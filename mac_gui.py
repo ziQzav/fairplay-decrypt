@@ -9,6 +9,9 @@ build; no third-party dependencies.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import os
 import platform
 import queue
 import subprocess
@@ -18,7 +21,12 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-ROOT = Path(__file__).resolve().parent
+FROZEN = bool(getattr(sys, "frozen", False)) or "RESOURCEPATH" in os.environ
+if FROZEN and os.environ.get("RESOURCEPATH"):
+    # Inside a py2app bundle the runtime files live in Contents/Resources.
+    ROOT = Path(os.environ["RESOURCEPATH"])
+else:
+    ROOT = Path(__file__).resolve().parent
 TRANSFORM = ROOT / "transform"
 
 IS_MACOS = platform.system() == "Darwin"
@@ -64,10 +72,98 @@ class DecryptRunner:
             self.lines.put(None)
 
 
+class _WriterCancelled(Exception):
+    """Raised by the cancel-aware stdout stand-in to abort decrypt.main()."""
+
+
+class _CancelWriter(io.TextIOBase):
+    """stdout stand-in: forwards lines to the queue, aborts on cancel."""
+
+    def __init__(
+        self, lines: queue.Queue[str | None], cancelled: threading.Event
+    ) -> None:
+        self.lines = lines
+        self.cancelled = cancelled
+        self._buffer = ""
+
+    def enqueue(self, line: str) -> None:
+        if line.strip():
+            self.lines.put(line.rstrip())
+
+    def write(self, text: str) -> int:
+        if self.cancelled.is_set():
+            raise _WriterCancelled
+        self._buffer += text
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            self.enqueue(line)
+        return len(text)
+
+    def flush(self) -> None:
+        if self.cancelled.is_set():
+            raise _WriterCancelled
+
+    def close(self) -> None:  # interpreter-finalization calls this; stay silent
+        pass
+
+
+class InProcessRunner:
+    """Runs decrypt.py's main() inside the bundled app (no external Python).
+
+    A py2app bundle has no plain interpreter to hand a subprocess, so the
+    decryptor's CLI entry point is called directly with argv patched and
+    stdout streamed into the queue line by line. Cancel works by raising
+    from the redirected stdout, which unwinds decrypt.main() before it
+    writes the output file.
+    """
+
+    def __init__(self) -> None:
+        self.lines: queue.Queue[str | None] = queue.Queue()
+        self.returncode: int | None = None
+        self._cancelled = threading.Event()
+
+    def start(self, ipa: Path, output: Path, credential: Path) -> None:
+        threading.Thread(
+            target=self._run, args=(ipa, output, credential), daemon=True
+        ).start()
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+
+    def _run(self, ipa: Path, output: Path, credential: Path) -> None:
+        writer = _CancelWriter(self.lines, self._cancelled)
+        code: int | None = 0
+        try:
+            import decrypt
+
+            decrypt.ROOT = ROOT
+            with contextlib.redirect_stdout(writer):
+                sys.argv = [
+                    "decrypt.py",
+                    str(ipa),
+                    str(output),
+                    "--credential",
+                    str(credential),
+                ]
+                decrypt.main()
+        except _WriterCancelled:
+            code = None
+        except SystemExit as error:
+            code = error.code if isinstance(error.code, int) else 1
+        except BaseException as error:  # surface tool errors in the log
+            writer.enqueue(f"Error: {error}")
+            code = 1
+        finally:
+            writer.enqueue(writer._buffer)
+            writer._buffer = ""
+        self.returncode = code
+        self.lines.put(None)
+
+
 class App:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.runner = DecryptRunner()
+        self.runner = InProcessRunner() if FROZEN else DecryptRunner()
         self.busy = False
         root.title("FairPlay Decrypt")
         root.minsize(620, 420)
@@ -76,7 +172,9 @@ class App:
         outer.pack(fill=tk.BOTH, expand=True)
 
         self.ipa_var = tk.StringVar()
-        self.credential_var = tk.StringVar(value=str(ROOT / "credential.bin"))
+        self.credential_var = tk.StringVar(
+            value="" if FROZEN else str(ROOT / "credential.bin")
+        )
         self.output_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready.")
 
