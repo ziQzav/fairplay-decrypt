@@ -24,7 +24,8 @@ jobs:
       - name: Zip app bundle
         run: |
           cd dist
-          zip -qry "FairPlayDecrypt-macos.zip" "FairPlayDecrypt.app"
+          APP_NAME=$(ls -d *.app | head -1)
+          zip -qry "FairPlayDecrypt-macos.zip" "$APP_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: FairPlayDecrypt-macos
