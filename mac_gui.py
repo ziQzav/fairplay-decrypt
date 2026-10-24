@@ -22,9 +22,13 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 FROZEN = bool(getattr(sys, "frozen", False)) or "RESOURCEPATH" in os.environ
-if FROZEN and os.environ.get("RESOURCEPATH"):
+if FROZEN:
     # Inside a py2app bundle the runtime files live in Contents/Resources.
-    ROOT = Path(os.environ["RESOURCEPATH"])
+    env = os.environ.get("RESOURCEPATH")
+    if env:
+        ROOT = Path(env)
+    else:
+        ROOT = Path(sys.executable).resolve().parent.parent / "Resources"
 else:
     ROOT = Path(__file__).resolve().parent
 TRANSFORM = ROOT / "transform"
